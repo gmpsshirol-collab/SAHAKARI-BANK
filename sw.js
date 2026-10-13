@@ -1,0 +1,44 @@
+const CACHE = 'sahakari-pwa-v1';
+const ASSETS = [
+  './', './index.html', './manifest.webmanifest',
+  './lib/xlsx.full.min.js',
+  './icons/icon-192.png', './icons/icon-512.png', './icons/icon-maskable-512.png',
+  './fonts/NotoSansKannada_400Regular.ttf', './fonts/NotoSansKannada_500Medium.ttf',
+  './fonts/NotoSansKannada_600SemiBold.ttf', './fonts/NotoSansKannada_700Bold.ttf',
+  './fonts/NotoSerifKannada_400Regular.ttf', './fonts/NotoSerifKannada_600SemiBold.ttf',
+  './fonts/NotoSerifKannada_700Bold.ttf'
+];
+
+self.addEventListener('install', e => {
+  e.waitUntil(caches.open(CACHE).then(c => c.addAll(ASSETS)).then(() => self.skipWaiting()));
+});
+
+self.addEventListener('activate', e => {
+  e.waitUntil(
+    caches.keys().then(keys => Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k))))
+      .then(() => self.clients.claim())
+  );
+});
+
+// Network-first for pages (so updates arrive), cache-first for everything else.
+self.addEventListener('fetch', e => {
+  const req = e.request;
+  if (req.method !== 'GET' || new URL(req.url).origin !== location.origin) return;
+  if (req.mode === 'navigate') {
+    e.respondWith(
+      fetch(req).then(r => {
+        const copy = r.clone();
+        caches.open(CACHE).then(c => c.put('./index.html', copy));
+        return r;
+      }).catch(() => caches.match('./index.html'))
+    );
+    return;
+  }
+  e.respondWith(
+    caches.match(req).then(hit => hit || fetch(req).then(r => {
+      const copy = r.clone();
+      caches.open(CACHE).then(c => c.put(req, copy));
+      return r;
+    }))
+  );
+});
